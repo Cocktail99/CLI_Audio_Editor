@@ -20,5 +20,9 @@ add_library(audiocore
     src/WavWriter.cpp
     src/Crop.cpp
     src/Cut.cpp
+    src/Append.cpp
+    src/Mix.cpp
+    src/Silence.cpp
+    src/Mono.cpp
 )
 target_include_directories(audiocore PUBLIC include)
