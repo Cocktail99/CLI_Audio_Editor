@@ -16,5 +16,6 @@ endif()
 
 add_library(audiocore
     src/AudioClip.cpp
+    src/WavReader.cpp
 )
 target_include_directories(audiocore PUBLIC include)
