@@ -28,5 +28,7 @@ add_library(audiocore
     src/Normalize.cpp
     src/Reverse.cpp
     src/Fade.cpp
+    src/Echo.cpp
+    src/Speed.cpp
 )
 target_include_directories(audiocore PUBLIC include)

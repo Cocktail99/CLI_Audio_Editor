@@ -59,3 +59,26 @@ public:
 private:
     double seconds_;
 };
+
+// Feedback echo: y[n] = x[n] + decay * y[n - delay].
+// The clip is extended so the echo tail is not cut off.
+class Echo : public Effect {
+public:
+    Echo(double delaySeconds, double decay);
+    void apply(AudioClip& clip) const override;
+    std::string name() const override { return "echo"; }
+private:
+    double delay_;
+    double decay_;
+};
+
+// Changes playback speed (and therefore pitch) by resampling with
+// linear interpolation. factor 2.0 = twice as fast, 0.5 = half speed.
+class Speed : public Effect {
+public:
+    explicit Speed(double factor);
+    void apply(AudioClip& clip) const override;
+    std::string name() const override { return "speed"; }
+private:
+    double factor_;
+};
