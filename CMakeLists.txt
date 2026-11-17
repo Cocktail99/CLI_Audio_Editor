@@ -18,5 +18,7 @@ add_library(audiocore
     src/AudioClip.cpp
     src/WavReader.cpp
     src/WavWriter.cpp
+    src/Crop.cpp
+    src/Cut.cpp
 )
 target_include_directories(audiocore PUBLIC include)
