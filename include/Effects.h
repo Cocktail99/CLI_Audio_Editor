@@ -82,3 +82,17 @@ public:
 private:
     double factor_;
 };
+
+// Second-order IIR (biquad) filter, using the coefficients from
+// Robert Bristow-Johnson's "Audio EQ Cookbook".
+class BiquadFilter : public Effect {
+public:
+    enum class Type { LowPass, HighPass };
+    BiquadFilter(Type type, double cutoffHz, double q = 0.7071);
+    void apply(AudioClip& clip) const override;
+    std::string name() const override;
+private:
+    Type type_;
+    double cutoff_;
+    double q_;
+};

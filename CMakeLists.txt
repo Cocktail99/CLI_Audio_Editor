@@ -30,5 +30,6 @@ add_library(audiocore
     src/Fade.cpp
     src/Echo.cpp
     src/Speed.cpp
+    src/BiquadFilter.cpp
 )
 target_include_directories(audiocore PUBLIC include)
