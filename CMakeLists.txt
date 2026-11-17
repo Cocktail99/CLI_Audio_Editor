@@ -24,5 +24,8 @@ add_library(audiocore
     src/Mix.cpp
     src/Silence.cpp
     src/Mono.cpp
+    src/Volume.cpp
+    src/Normalize.cpp
+    src/Reverse.cpp
 )
 target_include_directories(audiocore PUBLIC include)
