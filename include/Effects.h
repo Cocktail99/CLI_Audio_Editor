@@ -39,3 +39,23 @@ public:
     void apply(AudioClip& clip) const override;
     std::string name() const override { return "reverse"; }
 };
+
+// Linear fade in over the first `seconds`.
+class FadeIn : public Effect {
+public:
+    explicit FadeIn(double seconds);
+    void apply(AudioClip& clip) const override;
+    std::string name() const override { return "fade in"; }
+private:
+    double seconds_;
+};
+
+// Linear fade out over the last `seconds`.
+class FadeOut : public Effect {
+public:
+    explicit FadeOut(double seconds);
+    void apply(AudioClip& clip) const override;
+    std::string name() const override { return "fade out"; }
+private:
+    double seconds_;
+};
