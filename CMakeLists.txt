@@ -38,5 +38,7 @@ add_library(audiocore
     src/CommandUtils.cpp
     src/Editor.cpp
     src/FileCommands.cpp
+    src/EditCommands.cpp
+    src/EffectCommands.cpp
 )
 target_include_directories(audiocore PUBLIC include)
