@@ -32,5 +32,7 @@ add_library(audiocore
     src/Speed.cpp
     src/BiquadFilter.cpp
     src/FFT.cpp
+    src/ColorMap.cpp
+    src/BmpWriter.cpp
 )
 target_include_directories(audiocore PUBLIC include)
