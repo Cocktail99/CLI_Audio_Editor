@@ -36,5 +36,7 @@ add_library(audiocore
     src/BmpWriter.cpp
     src/Spectrogram.cpp
     src/CommandUtils.cpp
+    src/Editor.cpp
+    src/FileCommands.cpp
 )
 target_include_directories(audiocore PUBLIC include)
