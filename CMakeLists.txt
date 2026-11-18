@@ -40,5 +40,7 @@ add_library(audiocore
     src/FileCommands.cpp
     src/EditCommands.cpp
     src/EffectCommands.cpp
+    src/AnalysisCommands.cpp
+    src/Help.cpp
 )
 target_include_directories(audiocore PUBLIC include)
