@@ -44,3 +44,6 @@ add_library(audiocore
     src/Help.cpp
 )
 target_include_directories(audiocore PUBLIC include)
+
+add_executable(audio_editor src/main.cpp)
+target_link_libraries(audio_editor PRIVATE audiocore)
