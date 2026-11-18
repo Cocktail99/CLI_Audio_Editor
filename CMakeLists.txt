@@ -34,5 +34,6 @@ add_library(audiocore
     src/FFT.cpp
     src/ColorMap.cpp
     src/BmpWriter.cpp
+    src/Spectrogram.cpp
 )
 target_include_directories(audiocore PUBLIC include)
