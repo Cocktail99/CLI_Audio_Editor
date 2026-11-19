@@ -1,0 +1,16 @@
+# Demo script: build a small sound from scratch, edit it and analyze it.
+# Run from the build folder with:  ./audio_editor ../examples/demo.txt
+TONE 440 3              # A4 note
+SAVE a4.wav
+TONE 660 3              # E5 note
+MIX a4.wav              # A4 + E5 together = a fifth
+NORMALIZE
+INFO
+FADEIN 0.05            # soft start/end so the echoes don't click
+FADEOUT 0.3
+ECHO 0.25 0.4
+FADEOUT 1
+PEAKFREQ
+SPECTROGRAM demo_spectrogram.bmp
+SAVE demo.wav
+EXIT
