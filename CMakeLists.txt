@@ -47,3 +47,8 @@ target_include_directories(audiocore PUBLIC include)
 
 add_executable(audio_editor src/main.cpp)
 target_link_libraries(audio_editor PRIVATE audiocore)
+
+enable_testing()
+add_executable(tests tests/tests.cpp)
+target_link_libraries(tests PRIVATE audiocore)
+add_test(NAME unit_tests COMMAND tests)
