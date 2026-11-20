@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI Audio Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;800;900&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a night-time studio. One loud element (the live spectrogram band),
+   everything else quiet panels on violet-black, accents taken from the editor's own heat colour map. */
+:root {
+  --ink: #0e0b12;
+  --panel: #18131e;
+  --line: #2c2436;
+  --text: #efe8f3;
+  --muted: #a096ad;
+  --heat: #ff9440;
+  --heat-hot: #ffd166;
+  --violet: #8a3fb8;
+  --ok: #7fd1a8;
+  --err: #ff6b6b;
+  --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--ink);
+  color: var(--text);
+  font: 16px/1.6 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--heat); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, label:focus-within {
+  outline: 2px solid var(--heat-hot); outline-offset: 2px;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+code, pre, kbd { font-family: var(--mono); }
+.wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; padding: 150px 0 40px; }
+#waterfall { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(14,11,18,0) 15%, rgba(14,11,18,.55) 45%, rgba(14,11,18,.94) 85%, var(--ink));
+}
+.hero-text { position: relative; z-index: 1; }
+.eyebrow {
+  font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--heat);
+  display: flex; gap: 12px; flex-wrap: wrap;
+}
+.eyebrow span + span::before { content: "/"; margin-right: 12px; color: var(--muted); }
+h1 {
+  font: 900 clamp(56px, 11vw, 132px)/.86 var(--display);
+  text-transform: uppercase; letter-spacing: -.01em; margin: 14px 0 12px;
+}
+h1 em { font-style: normal; color: transparent; -webkit-text-stroke: 2px var(--heat); }
+.lede { max-width: 60ch; color: #d9d0e0; font-size: 18px; margin: 0; }
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+.btn {
+  font: 600 14px/1 var(--body); border-radius: 6px; padding: 12px 16px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn:hover { border-color: var(--heat); }
+.btn.primary { background: var(--heat); color: #1a0d02; border-color: var(--heat); }
+.btn.primary:hover { background: var(--heat-hot); }
+
+/* ---------- stats ---------- */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.stat { padding: 22px 0 22px 20px; border-left: 1px solid var(--line); }
+.stat:first-child { border-left: 0; padding-left: 0; }
+.stat b { display: block; font: 800 44px/1 var(--display); color: var(--heat-hot); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 14px; }
+
+section { padding: 72px 0 0; }
+.sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.sec-head .tag { font: 600 12px/1 var(--mono); color: var(--violet); letter-spacing: .1em; }
+h2 { font: 800 clamp(36px, 5vw, 56px)/.95 var(--display); text-transform: uppercase; }
+.sec-head p { color: var(--muted); margin: 0; max-width: 56ch; flex-basis: 100%; }
+
+/* ---------- studio (demo) ---------- */
+.studio { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.term { display: flex; flex-direction: column; min-height: 520px; }
+.term-bar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  font: 12px var(--mono); color: var(--muted);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.dot:nth-child(1) { background: #ff6b6b; } .dot:nth-child(2) { background: var(--heat-hot); } .dot:nth-child(3) { background: var(--ok); }
+.term-bar span { margin-left: 6px; }
+#log {
+  flex: 1; overflow-y: auto; padding: 14px; margin: 0; font: 13px/1.6 var(--mono);
+  white-space: pre-wrap; word-break: break-word; max-height: 430px;
+}
+#log .cmd { color: var(--text); }
+#log .cmd::before { content: "> "; color: var(--heat); }
+#log .out { color: var(--muted); }
+#log .err { color: var(--err); }
+#log .note { color: var(--violet); }
+.prompt { display: flex; align-items: center; border-top: 1px solid var(--line); padding: 4px 14px; }
+.prompt label { color: var(--heat); font: 600 13px var(--mono); }
+#cmd {
+  flex: 1; background: transparent; border: 0; color: var(--text); font: 13px var(--mono);
+  padding: 10px 8px; outline: none;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 14px; }
+.chip {
+  font: 12px var(--mono); padding: 5px 9px; border-radius: 4px; cursor: pointer;
+  background: transparent; color: var(--muted); border: 1px dashed var(--line);
+}
+.chip:hover { color: var(--heat-hot); border-color: var(--heat); border-style: solid; }
+
+.viz { display: flex; flex-direction: column; }
+.transport { display: flex; gap: 8px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.transport select {
+  background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  font: 13px var(--body); padding: 10px;
+}
+.transport .btn { padding: 10px 12px; font-size: 13px; }
+#play { min-width: 92px; justify-content: center; }
+.meta { margin-left: auto; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.canvas-box { position: relative; margin: 12px 14px 0; }
+.canvas-box canvas { display: block; width: 100%; border-radius: 6px; background: #000; }
+#wave { height: 84px; }
+#spec { height: 300px; }
+.axis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--muted); margin: 4px 14px 0; }
+.freq-labels {
+  position: absolute; top: 0; bottom: 0; left: 6px; display: flex; flex-direction: column;
+  justify-content: space-between; font: 10px var(--mono); color: rgba(255,255,255,.65); padding: 4px 0; pointer-events: none;
+}
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--heat-hot); box-shadow: 0 0 10px var(--heat); display: none; }
+.drop-hint { margin: 10px 14px 14px; font-size: 13px; color: var(--muted); }
+.viz.dragging { border-color: var(--heat); }
+
+/* ---------- features ---------- */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.feature { background: var(--ink); padding: 24px; }
+.feature h3 { font: 800 24px/1.05 var(--display); text-transform: uppercase; margin-bottom: 8px; }
+.feature h3 small { display: block; font: 600 11px/1.4 var(--mono); color: var(--heat); letter-spacing: .08em; margin-bottom: 6px; }
+.feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+/* ---------- internals ---------- */
+.internals { display: grid; gap: 16px; }
+.internal { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 0; }
+.internal .explain { padding: 24px; border-right: 1px solid var(--line); }
+.internal h3 { font: 800 28px/1 var(--display); text-transform: uppercase; margin-bottom: 10px; }
+.internal .explain p { color: var(--muted); margin: 0 0 10px; font-size: 15px; }
+.internal .explain p:last-child { margin-bottom: 0; }
+.internal .math { font: 13px var(--mono); color: var(--heat-hot); background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: block; margin: 12px 0; overflow-x: auto; white-space: nowrap; }
+.internal pre { margin: 0; padding: 20px 24px; overflow-x: auto; font-size: 13px; line-height: 1.6; color: #d8cfe0; }
+.internal pre .c { color: #7d7290; font-style: italic; }
+.internal pre .k { color: var(--heat); }
+
+/* ---------- reference ---------- */
+.ref-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px var(--mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+td:first-child { font: 13px var(--mono); color: var(--heat-hot); white-space: nowrap; }
+td.group { font: 800 18px var(--display); color: var(--violet); text-transform: uppercase; padding-top: 22px; letter-spacing: .04em; }
+
+/* ---------- build ---------- */
+.build { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.build pre { margin: 0; padding: 20px; font-size: 13px; overflow-x: auto; }
+.build pre .p { color: var(--heat); user-select: none; }
+.build .panel h3 { font: 800 22px var(--display); text-transform: uppercase; padding: 18px 20px 0; }
+
+footer { margin-top: 88px; border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 860px) {
+  .studio, .internal, .build { grid-template-columns: 1fr; }
+  .internal .explain { border-right: 0; border-bottom: 1px solid var(--line); }
+  .features { grid-template-columns: 1fr 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stat:nth-child(3) { border-left: 0; padding-left: 0; }
+  .term { min-height: 0; }
+  #log { max-height: 300px; }
+}
+@media (max-width: 520px) {
+  .features { grid-template-columns: 1fr; }
+  .hero { padding-top: 110px; }
+  .meta { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <canvas id="waterfall" aria-hidden="true"></canvas>
+  <div class="hero-text wrap">
+    <div class="eyebrow"><span>C++17</span><span>Zero dependencies</span><span>FFT from scratch</span></div>
+    <h1>CLI Audio <em>Editor</em></h1>
+    <p class="lede">A command-line audio editor that reads WAV files, cuts and mixes them, runs them through echo, filters and speed changes, and draws spectrograms with its own Fast Fourier Transform.</p>
+    <div class="hero-actions">
+      <a class="btn primary" href="#studio">Try it in the browser</a>
+      <a class="btn" href="https://github.com/Cocktail99/CLI_Audio_Editor">View source on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><b>0</b><span>external libraries</span></div>
+    <div class="stat"><b>38</b><span>source and header files</span></div>
+    <div class="stat"><b>18</b><span>unit tests</span></div>
+    <div class="stat"><b>3</b><span>operating systems in CI</span></div>
+  </div>
+
+  <!-- ================= STUDIO ================= -->
+  <section id="studio">
+    <div class="sec-head">
+      <span class="tag">01</span><h2>The studio</h2>
+      <p>The same commands as the real editor, ported to JavaScript so they run here. Type a command, press a chip, or drop a WAV file on the right. Press Play to hear the result.</p>
+    </div>
+
+    <div class="studio">
+      <div class="panel term">
+        <div class="term-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>audio_editor — demo.txt</span></div>
+        <div id="log" aria-live="polite"></div>
+        <form class="prompt" id="prompt" autocomplete="off">
+          <label for="cmd">&gt;</label>
+          <input id="cmd" spellcheck="false" placeholder="type a command, e.g. ECHO 0.3 0.5   (HELP lists them all)">
+        </form>
+        <div class="chips" id="chips">
+          <button class="chip" type="button">ECHO 0.3 0.5</button>
+          <button class="chip" type="button">LOWPASS 800</button>
+          <button class="chip" type="button">HIGHPASS 1500</button>
+          <button class="chip" type="button">SPEED 1.5</button>
+          <button class="chip" type="button">REVERSE</button>
+          <button class="chip" type="button">CROP 0 2</button>
+          <button class="chip" type="button">PEAKFREQ</button>
+          <button class="chip" type="button">INFO</button>
+          <button class="chip" type="button">UNDO</button>
+          <button class="chip" type="button">PLAY</button>
+        </div>
+      </div>
+
+      <div class="panel viz" id="viz">
+        <div class="transport">
+          <button class="btn primary" id="play" type="button">▶ Play</button>
+          <label class="btn" for="file" id="loadLabel">Load WAV<input type="file" id="file" accept=".wav,audio/wav,audio/x-wav" hidden></label>
+          <select id="preset" aria-label="Demo sound">
+            <option value="chord">Demo: chord with echo</option>
+            <option value="sweep">Demo: frequency sweep</option>
+            <option value="arp">Demo: arpeggio</option>
+            <option value="noise">Demo: white noise</option>
+          </select>
+          <span class="meta" id="meta"></span>
+        </div>
+        <div class="canvas-box"><canvas id="wave" width="900" height="84"></canvas><div class="playhead" id="ph1"></div></div>
+        <div class="canvas-box">
+          <canvas id="spec" width="900" height="300"></canvas>
+          <div class="freq-labels" id="freqLabels"></div>
+          <div class="playhead" id="ph2"></div>
+        </div>
+        <div class="axis"><span>0:00</span><span id="endTime"></span></div>
+        <p class="drop-hint">Spectrogram: time left to right, frequency bottom to top on a log scale, loudness as colour. Drop a .wav file anywhere on this panel to load it. Your audio never leaves the browser.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FEATURES ================= -->
+  <section>
+    <div class="sec-head"><span class="tag">02</span><h2>What it does</h2></div>
+    <div class="features">
+      <div class="feature"><h3><small>FILES</small>WAV in, WAV out</h3><p>A hand-written RIFF parser that reads 8, 16, 24 and 32-bit PCM and 32/64-bit float, mono or multichannel, and skips chunks it doesn't need. Saves 16-bit PCM.</p></div>
+      <div class="feature"><h3><small>EDITING</small>Cut, crop, mix</h3><p>Crop, cut, append, overlay another file at any time, insert silence, mix down to mono. Stereo and mono clips are matched automatically.</p></div>
+      <div class="feature"><h3><small>EFFECTS</small>Shape the sound</h3><p>Volume, normalize, reverse, fades, feedback echo, speed change by resampling, and second-order low-pass and high-pass filters.</p></div>
+      <div class="feature"><h3><small>ANALYSIS</small>See the sound</h3><p>A radix-2 FFT drives a short-time Fourier transform. Spectrograms render to BMP on a log-frequency axis, and PEAKFREQ finds the loudest pitch.</p></div>
+      <div class="feature"><h3><small>SAFETY</small>Undo anything</h3><p>Every edit works on a copy. If a command fails halfway, the clip is untouched, and the last 20 edits can be undone.</p></div>
+      <div class="feature"><h3><small>WORKFLOW</small>Live or scripted</h3><p>Type commands interactively, or run a whole script file with comments. GitHub Actions builds and tests it on Linux, Windows and macOS.</p></div>
+    </div>
+  </section>
+
+  <!-- ================= INTERNALS ================= -->
+  <section>
+    <div class="sec-head"><span class="tag">03</span><h2>Under the hood</h2><p>The three parts that took the most thought, with the actual C++ from the repository.</p></div>
+    <div class="internals">
+      <div class="panel internal">
+        <div class="explain">
+          <h3>Fast Fourier Transform</h3>
+          <p>A naive Fourier transform compares the signal against every frequency, which costs O(N²). Cooley–Tukey splits it into even and odd halves recursively, so it costs O(N log N).</p>
+          <code class="math">X[k] = E[k] + w·O[k],   X[k+N/2] = E[k] − w·O[k],   w = e^(−2πik/N)</code>
+          <p>The implementation is iterative: reorder the input by bit-reversed index, then merge blocks of size 2, 4, 8 and so on. The unit tests compare it against a naive DFT to 10⁻⁹.</p>
+        </div>
+<pre><span class="c">// combine sub-transforms of size len/2 into size len</span>
+<span class="k">for</span> (std::size_t len = 2; len &lt;= n; len &lt;&lt;= 1) {
+    <span class="k">const double</span> angle = 2 * kPi / len * (inverse ? 1 : -1);
+    <span class="k">const</span> std::complex&lt;double&gt; wLen(std::cos(angle), std::sin(angle));
+    <span class="k">for</span> (std::size_t i = 0; i &lt; n; i += len) {
+        std::complex&lt;double&gt; w(1);
+        <span class="k">for</span> (std::size_t k = 0; k &lt; len / 2; ++k) {
+            <span class="k">const auto</span> even = a[i + k];
+            <span class="k">const auto</span> odd  = a[i + k + len / 2] * w;
+            a[i + k]           = even + odd;   <span class="c">// butterfly</span>
+            a[i + k + len / 2] = even - odd;
+            w *= wLen;
+        }
+    }
+}</pre>
+      </div>
+
+      <div class="panel internal">
+        <div class="explain">
+          <h3>Biquad filters</h3>
+          <p>Low-pass and high-pass filters are second-order IIR filters: each output sample mixes the last two inputs and the last two outputs.</p>
+          <code class="math">y[n] = b0·x[n] + b1·x[n−1] + b2·x[n−2] − a1·y[n−1] − a2·y[n−2]</code>
+          <p>The coefficients come from Robert Bristow-Johnson's Audio EQ Cookbook, with Q = 1/√2 for a flat (Butterworth) passband. In the tests, an 8 kHz tone through an 1 kHz low-pass drops below 4% of its level.</p>
+        </div>
+<pre><span class="c">// Direct Form I, one filter state per channel</span>
+<span class="k">for</span> (<span class="k">auto</span>&amp; ch : clip.channels()) {
+    <span class="k">double</span> x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    <span class="k">for</span> (<span class="k">float</span>&amp; s : ch) {
+        <span class="k">const double</span> x0 = s;
+        <span class="k">const double</span> y0 = b0 * x0 + b1 * x1 + b2 * x2
+                        - na1 * y1 - na2 * y2;
+        x2 = x1; x1 = x0;
+        y2 = y1; y1 = y0;
+        s = <span class="k">static_cast</span>&lt;<span class="k">float</span>&gt;(y0);
+    }
+}</pre>
+      </div>
+
+      <div class="panel internal">
+        <div class="explain">
+          <h3>Reading WAV files</h3>
+          <p>A WAV file is a RIFF container: a list of tagged chunks. The reader walks every chunk, keeps the format and the samples, and skips the rest, such as metadata.</p>
+          <p>Every format is decoded into 32-bit floats between −1 and 1, so no effect has to care whether the file was 8-bit, 24-bit or float. 24-bit samples need manual sign extension.</p>
+        </div>
+<pre><span class="c">// walk the RIFF chunks; only "fmt " and "data" matter</span>
+<span class="k">while</span> (pos + 8 &lt;= data.size()) {
+    <span class="k">const</span> uint8_t* id = data.data() + pos;
+    std::size_t size = readLE32(data.data() + pos + 4);
+    std::size_t body = pos + 8;
+
+    <span class="k">if</span> (std::memcmp(id, <span class="k">"fmt "</span>, 4) == 0)      parseFormat(body);
+    <span class="k">else if</span> (std::memcmp(id, <span class="k">"data"</span>, 4) == 0) samples = data.data() + body;
+
+    pos = body + size + (size &amp; 1);  <span class="c">// chunks are padded to even size</span>
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REFERENCE ================= -->
+  <section id="commands">
+    <div class="sec-head"><span class="tag">04</span><h2>Commands</h2><p>Times are in seconds. Commands are case-insensitive, <code>#</code> starts a comment, and file names with spaces can be quoted.</p></div>
+    <div class="panel ref-wrap">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="group" colspan="2">Files</td></tr>
+          <tr><td>LOAD &lt;file.wav&gt;</td><td>Open a WAV file</td></tr>
+          <tr><td>SAVE [file.wav]</td><td>Save as 16-bit PCM (to the current file if no name is given)</td></tr>
+          <tr><td>TONE &lt;hz&gt; &lt;seconds&gt; [rate]</td><td>Generate a sine wave</td></tr>
+          <tr><td>INFO</td><td>Duration, sample rate, channels and peak level</td></tr>
+          <tr><td class="group" colspan="2">Editing</td></tr>
+          <tr><td>CROP &lt;start&gt; &lt;end&gt;</td><td>Keep only this part</td></tr>
+          <tr><td>CUT &lt;start&gt; &lt;end&gt;</td><td>Remove this part</td></tr>
+          <tr><td>APPEND &lt;file.wav&gt;</td><td>Add another file at the end</td></tr>
+          <tr><td>MIX &lt;file.wav&gt; [at]</td><td>Overlay another file, optionally starting at a time</td></tr>
+          <tr><td>SILENCE &lt;at&gt; &lt;length&gt;</td><td>Insert silence</td></tr>
+          <tr><td>MONO</td><td>Mix all channels down to one</td></tr>
+          <tr><td class="group" colspan="2">Effects</td></tr>
+          <tr><td>VOLUME &lt;factor&gt;</td><td>Scale the volume, e.g. 0.5 for half as loud</td></tr>
+          <tr><td>NORMALIZE [peak]</td><td>Scale so the loudest sample reaches the peak (default 0.99)</td></tr>
+          <tr><td>REVERSE</td><td>Play backwards</td></tr>
+          <tr><td>SPEED &lt;factor&gt;</td><td>Change speed and pitch; 2 is twice as fast</td></tr>
+          <tr><td>FADEIN &lt;s&gt; / FADEOUT &lt;s&gt;</td><td>Linear fades</td></tr>
+          <tr><td>ECHO &lt;delay&gt; &lt;decay&gt;</td><td>Feedback echo, e.g. ECHO 0.3 0.5</td></tr>
+          <tr><td>LOWPASS &lt;hz&gt; / HIGHPASS &lt;hz&gt;</td><td>Second-order biquad filters</td></tr>
+          <tr><td class="group" colspan="2">Analysis</td></tr>
+          <tr><td>SPECTROGRAM &lt;file.bmp&gt; [fft]</td><td>Render a spectrogram image</td></tr>
+          <tr><td>PEAKFREQ</td><td>Print the dominant frequency</td></tr>
+          <tr><td>UNDO, HELP, EXIT</td><td>Undo the last edit, list commands, quit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= BUILD ================= -->
+  <section>
+    <div class="sec-head"><span class="tag">05</span><h2>Build it</h2><p>Needs CMake 3.14 or newer and any C++17 compiler: GCC, Clang or MSVC.</p></div>
+    <div class="build">
+      <div class="panel"><h3>Compile and test</h3>
+<pre><span class="p">$ </span>git clone https://github.com/Cocktail99/CLI_Audio_Editor
+<span class="p">$ </span>cd CLI_Audio_Editor
+<span class="p">$ </span>cmake -S . -B build
+<span class="p">$ </span>cmake --build build
+<span class="p">$ </span>./build/tests
+All tests passed</pre></div>
+      <div class="panel"><h3>Run</h3>
+<pre><span class="p">$ </span>./build/audio_editor                    <span style="color:#7d7290"># interactive</span>
+<span class="p">$ </span>./build/audio_editor examples/demo.txt  <span style="color:#7d7290"># script</span>
+<span class="p">&gt; </span>LOAD song.wav
+Loaded song.wav (3:12.40, 44100 Hz, 2 ch)
+<span class="p">&gt; </span>CROP 30 60
+<span class="p">&gt; </span>SPECTROGRAM song.bmp</pre></div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Built by Victor Diaconescu-Carbunescu · Computer Science, TU Eindhoven</span>
+    <a href="https://github.com/Cocktail99/CLI_Audio_Editor">github.com/Cocktail99/CLI_Audio_Editor</a>
+  </div>
+</footer>
+
+<script>
+"use strict";
+const PI = Math.PI;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ======================= audio core (port of the C++) ======================= */
+class Clip {
+  constructor(rate, channels, frames) {
+    this.rate = rate;
+    this.ch = Array.from({ length: channels }, () => new Float32Array(frames));
+  }
+  get frames() { return this.ch.length ? this.ch[0].length : 0; }
+  get duration() { return this.frames / this.rate; }
+  clone() { const c = new Clip(this.rate, 0, 0); c.ch = this.ch.map(a => a.slice()); return c; }
+  toFrame(s) { return s <= 0 ? 0 : Math.min(Math.round(s * this.rate), this.frames); }
+  peak() { let p = 0; for (const a of this.ch) for (const s of a) p = Math.max(p, Math.abs(s)); return p; }
+  mono() {
+    const m = new Float32Array(this.frames);
+    for (const a of this.ch) for (let i = 0; i < m.length; i++) m[i] += a[i];
+    const k = 1 / this.ch.length; for (let i = 0; i < m.length; i++) m[i] *= k;
+    return m;
+  }
+  resize(n) { this.ch = this.ch.map(a => { const b = new Float32Array(n); b.set(a.subarray(0, Math.min(n, a.length))); return b; }); }
+}
+
+function parseWav(buf) {
+  const v = new DataView(buf), u8 = new Uint8Array(buf);
+  const tag = (o) => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  if (buf.byteLength < 12 || tag(0) !== "RIFF" || tag(8) !== "WAVE") throw new Error("not a WAV file");
+  let fmt = null, dataOff = -1, dataLen = 0, pos = 12;
+  while (pos + 8 <= buf.byteLength) {
+    const id = tag(pos), size = v.getUint32(pos + 4, true), body = pos + 8;
+    const avail = Math.min(size, buf.byteLength - body);
+    if (id === "fmt ") {
+      let format = v.getUint16(body, true);
+      if (format === 0xFFFE) format = v.getUint16(body + 24, true);
+      fmt = { format, channels: v.getUint16(body + 2, true), rate: v.getUint32(body + 4, true),
+              block: v.getUint16(body + 12, true), bits: v.getUint16(body + 14, true) };
+    } else if (id === "data") { dataOff = body; dataLen = avail; }
+    pos = body + size + (size & 1);
+  }
+  if (!fmt) throw new Error("WAV file has no fmt chunk");
+  if (dataOff < 0) throw new Error("WAV file has no data chunk");
+  const { format, channels, rate, bits } = fmt;
+  if (format !== 1 && format !== 3) throw new Error("only PCM and float WAV files are supported");
+  const bps = bits / 8, block = fmt.block || bps * channels, frames = Math.floor(dataLen / block);
+  const read = (o) => {
+    if (format === 1) {
+      if (bits === 8) return (u8[o] - 128) / 128;
+      if (bits === 16) return v.getInt16(o, true) / 32768;
+      if (bits === 24) { let x = u8[o] | (u8[o + 1] << 8) | (u8[o + 2] << 16); if (x & 0x800000) x |= ~0xFFFFFF; return x / 8388608; }
+      if (bits === 32) return v.getInt32(o, true) / 2147483648;
+    } else {
+      if (bits === 32) return v.getFloat32(o, true);
+      if (bits === 64) return v.getFloat64(o, true);
+    }
+    throw new Error("unsupported sample format (" + bits + "-bit)");
+  };
+  const clip = new Clip(rate, channels, frames);
+  for (let i = 0; i < frames; i++) for (let c = 0; c < channels; c++) clip.ch[c][i] = read(dataOff + i * block + c * bps);
+  return clip;
+}
+
+const fx = {
+  volume(c, f) { if (f < 0) throw new Error("volume factor must be non-negative"); for (const a of c.ch) for (let i = 0; i < a.length; i++) a[i] *= f; },
+  normalize(c, t = 0.99) { if (!(t > 0 && t <= 1)) throw new Error("target peak must be in (0, 1]"); const p = c.peak(); if (p > 0) fx.volume(c, t / p); },
+  reverse(c) { for (const a of c.ch) a.reverse(); },
+  fadein(c, s) { if (s <= 0) throw new Error("fade length must be positive"); const n = c.toFrame(s); for (const a of c.ch) for (let i = 0; i < n; i++) a[i] *= i / n; },
+  fadeout(c, s) { if (s <= 0) throw new Error("fade length must be positive"); const n = c.toFrame(s), T = c.frames; for (const a of c.ch) for (let i = 0; i < n; i++) a[T - 1 - i] *= i / n; },
+  echo(c, delay, decay) {
+    if (delay <= 0) throw new Error("echo delay must be positive");
+    if (!(decay > 0 && decay < 1)) throw new Error("echo decay must be in (0, 1)");
+    const d = Math.floor(delay * c.rate); if (!d) return;
+    const repeats = Math.min(20, Math.ceil(Math.log(0.001) / Math.log(decay)));
+    c.resize(c.frames + d * repeats);
+    for (const a of c.ch) for (let i = d; i < a.length; i++) a[i] += decay * a[i - d];
+  },
+  speed(c, f) {
+    if (f <= 0) throw new Error("speed factor must be positive");
+    const old = c.frames, n = Math.floor(old / f);
+    c.ch = c.ch.map(a => { const o = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const s = i * f, j = Math.floor(s), fr = s - j;
+        const x = a[Math.min(j, old - 1)], y = a[Math.min(j + 1, old - 1)]; o[i] = x + (y - x) * fr; }
+      return o; });
+  },
+  biquad(c, type, cutoff, q = Math.SQRT1_2) {
+    if (cutoff <= 0) throw new Error("cutoff frequency must be positive");
+    if (cutoff >= c.rate / 2) throw new Error("cutoff must be below " + c.rate / 2 + " Hz");
+    const w0 = 2 * PI * cutoff / c.rate, cw = Math.cos(w0), alpha = Math.sin(w0) / (2 * q);
+    let b0, b1, b2;
+    if (type === "low") { b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0; } else { b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0; }
+    const a0 = 1 + alpha, a1 = -2 * cw / a0, a2 = (1 - alpha) / a0; b0 /= a0; b1 /= a0; b2 /= a0;
+    for (const a of c.ch) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+      for (let i = 0; i < a.length; i++) { const x0 = a[i], y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1; x1 = x0; y2 = y1; y1 = y0; a[i] = y0; } }
+  },
+  range(c, s, e) { if (s < 0 || e <= s) throw new Error("invalid time range"); if (s >= c.duration) throw new Error("start is past the end of the clip"); return [c.toFrame(s), c.toFrame(e)]; },
+  crop(c, s, e) { const [a, b] = fx.range(c, s, e); c.ch = c.ch.map(x => x.slice(a, b)); },
+  cut(c, s, e) { const [a, b] = fx.range(c, s, e); c.ch = c.ch.map(x => { const o = new Float32Array(x.length - (b - a)); o.set(x.subarray(0, a)); o.set(x.subarray(b), a); return o; }); },
+  silence(c, at, len) { if (len <= 0) throw new Error("silence length must be positive"); const p = c.toFrame(at), n = Math.floor(len * c.rate);
+    c.ch = c.ch.map(x => { const o = new Float32Array(x.length + n); o.set(x.subarray(0, p)); o.set(x.subarray(p), p + n); return o; }); },
+  mono(c) { c.ch = [c.mono()]; },
+};
+
+/* ---- FFT (iterative radix-2 Cooley–Tukey, same as FFT.cpp) ---- */
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * PI / len, wr = Math.cos(ang), wi = Math.sin(ang), h = len >> 1;
+    for (let i = 0; i < n; i += len) { let cr = 1, ci = 0;
+      for (let k = 0; k < h; k++) { const a = i + k, b = a + h;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr; } }
+  }
+}
+const hannCache = {};
+function hann(n) { if (!hannCache[n]) { const w = new Float64Array(n); for (let i = 0; i < n; i++) w[i] = 0.5 * (1 - Math.cos(2 * PI * i / (n - 1))); hannCache[n] = w; } return hannCache[n]; }
+
+/* heat colour map: black -> purple -> red -> yellow -> white (ColorMap.cpp) */
+const STOPS = [[0, 0, 0], [80, 18, 123], [220, 50, 50], [250, 200, 40], [255, 255, 255]];
+const LUT = new Uint8ClampedArray(256 * 3);
+for (let i = 0; i < 256; i++) { const t = i / 255 * 4, k = Math.min(3, Math.floor(t)), f = t - k;
+  for (let c = 0; c < 3; c++) LUT[i * 3 + c] = STOPS[k][c] + (STOPS[k + 1][c] - STOPS[k][c]) * f; }
+const heat = (t) => Math.max(0, Math.min(255, Math.round(t * 255))) * 3;
+
+const MIN_F = 40, RANGE_DB = 90;
+function spectrogram(clip, canvas, N = 2048) {
+  const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height;
+  const x = clip.mono(), bins = N / 2, win = hann(N), nyq = clip.rate / 2, minF = Math.min(MIN_F, nyq / 2);
+  const frames = Math.max(1, Math.min(W, Math.floor((x.length - N) / 64) + 1));
+  const hop = x.length > N ? (x.length - N) / Math.max(1, frames - 1) : 0;
+  const rowBin = new Float64Array(H);
+  for (let r = 0; r < H; r++) rowBin[r] = Math.min(minF * Math.pow(nyq / minF, r / (H - 1)) / nyq * bins, bins - 1);
+  const db = new Float32Array(frames * bins), re = new Float64Array(N), im = new Float64Array(N);
+  let max = -1e9;
+  for (let f = 0; f < frames; f++) {
+    const s = Math.floor(f * hop);
+    for (let i = 0; i < N; i++) { re[i] = (s + i < x.length ? x[s + i] : 0) * win[i]; im[i] = 0; }
+    fft(re, im);
+    for (let k = 0; k < bins; k++) { const v = 20 * Math.log10(Math.hypot(re[k], im[k]) / bins + 1e-12); db[f * bins + k] = v; if (v > max) max = v; }
+  }
+  const img = ctx.createImageData(W, H), d = img.data;
+  for (let px = 0; px < W; px++) {
+    const f = Math.min(frames - 1, Math.floor(px * frames / W)), base = f * bins;
+    for (let r = 0; r < H; r++) {
+      const k = Math.floor(rowBin[r]), fr = rowBin[r] - k, a = db[base + k], b = db[base + Math.min(k + 1, bins - 1)];
+      const t = ((a + (b - a) * fr) - (max - RANGE_DB)) / RANGE_DB, li = heat(t), o = ((H - 1 - r) * W + px) * 4;
+      d[o] = LUT[li]; d[o + 1] = LUT[li + 1]; d[o + 2] = LUT[li + 2]; d[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function dominantFrequency(clip, N = 8192) {
+  const x = clip.mono(), win = hann(N), bins = N / 2, power = new Float64Array(bins), re = new Float64Array(N), im = new Float64Array(N);
+  const hop = Math.max(N / 4, Math.ceil((x.length - N) / 200));
+  for (let s = 0; ; s += hop) {
+    for (let i = 0; i < N; i++) { re[i] = (s + i < x.length ? x[s + i] : 0) * win[i]; im[i] = 0; }
+    fft(re, im);
+    for (let k = 0; k < bins; k++) power[k] += re[k] * re[k] + im[k] * im[k];
+    if (s + N >= x.length) break;
+  }
+  let best = 1; for (let k = 2; k < bins; k++) if (power[k] > power[best]) best = k;
+  return best * clip.rate / N;
+}
+
+/* ======================= demo sounds ======================= */
+function tone(freq, secs, rate = 44100, amp = 0.5) {
+  const c = new Clip(rate, 1, Math.floor(secs * rate)), a = c.ch[0];
+  for (let i = 0; i < a.length; i++) a[i] = amp * Math.sin(2 * PI * freq * i / rate);
+  return c;
+}
+function presetClip(name) {
+  const R = 44100;
+  if (name === "sweep") {
+    const c = new Clip(R, 1, 4 * R), a = c.ch[0]; let ph = 0;
+    for (let i = 0; i < a.length; i++) { const t = i / R, f = 80 * Math.pow(8000 / 80, t / 4); ph += 2 * PI * f / R; a[i] = 0.5 * Math.sin(ph); }
+    fx.fadein(c, 0.02); fx.fadeout(c, 0.05); return c;
+  }
+  if (name === "arp") {
+    const notes = [261.63, 329.63, 392, 523.25, 392, 329.63, 261.63, 196], len = 0.35;
+    const c = new Clip(R, 1, Math.floor(notes.length * len * R)), a = c.ch[0];
+    notes.forEach((f, n) => { const s = Math.floor(n * len * R), m = Math.floor(len * R);
+      for (let i = 0; i < m; i++) { const env = Math.exp(-4 * i / m) * Math.min(1, i / 200), t = i / R;
+        a[s + i] += env * (0.5 * Math.sin(2 * PI * f * t) + 0.18 * Math.sin(4 * PI * f * t) + 0.08 * Math.sin(6 * PI * f * t)); } });
+    fx.echo(c, 0.175, 0.35); fx.normalize(c); return c;
+  }
+  if (name === "noise") {
+    const c = new Clip(R, 1, 3 * R), a = c.ch[0]; let seed = 7;
+    for (let i = 0; i < a.length; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; a[i] = (seed / 0x7fffffff * 2 - 1) * 0.4; }
+    return c;
+  }
+  return null; // "chord" is built by running the demo script
+}
+const DEMO_SCRIPT = [
+  "TONE 440 3            # A4",
+  "MIX tone 660           # add E5 on top (a fifth)",
+  "NORMALIZE",
+  "FADEIN 0.05",
+  "FADEOUT 0.3",
+  "ECHO 0.25 0.4",
+  "FADEOUT 1",
+  "NORMALIZE             # the echo pushed it above 0 dB",
+  "INFO",
+];
+
+/* ======================= editor (port of Editor.cpp) ======================= */
+const state = { clip: null, undo: [], history: [], hIndex: 0 };
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+
+function print(text, cls = "out") {
+  const div = document.createElement("div"); div.className = cls; div.textContent = text; logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function fmtTime(s) { const m = Math.floor(s / 60); return m + ":" + (s - m * 60).toFixed(2).padStart(5, "0"); }
+function tokenize(line) {
+  const out = []; let cur = "", q = false, has = false;
+  for (const ch of line) { if (ch === '"') { q = !q; has = true; } else if (/\s/.test(ch) && !q) { if (has) out.push(cur); cur = ""; has = false; } else { cur += ch; has = true; } }
+  if (q) throw new Error("missing closing quote"); if (has) out.push(cur); return out;
+}
+function num(s) { const v = Number(s); if (s === undefined || s.trim() === "" || !isFinite(v)) throw new Error("'" + s + "' is not a number"); return v; }
+function need(args, min, max, usage) { if (args.length < min || args.length > max) throw new Error("usage: " + usage); }
+function requireClip() { if (!state.clip) throw new Error("no audio loaded (use LOAD, TONE or pick a demo sound)"); return state.clip; }
+function replaceClip(c) { if (state.clip) { state.undo.push(state.clip); if (state.undo.length > 20) state.undo.shift(); } state.clip = c; }
+function modify(edit) { const c = requireClip().clone(); edit(c); replaceClip(c); }
+
+const HELP = `Files      LOAD  SAVE  TONE <hz> <s>  INFO
+Editing    CROP <a> <b>  CUT <a> <b>  SILENCE <at> <len>  MONO
+Effects    VOLUME <f>  NORMALIZE [peak]  REVERSE  SPEED <f>
+           FADEIN <s>  FADEOUT <s>  ECHO <delay> <decay>
+           LOWPASS <hz>  HIGHPASS <hz>
+Analysis   PEAKFREQ  (the spectrogram updates by itself)
+Other      UNDO  PLAY  STOP  CLEAR  HELP`;
+
+function execute(line, opts = {}) {
+  const clean = line.split("#")[0];
+  let t; try { t = tokenize(clean); } catch (e) { print("Error: " + e.message, "err"); return; }
+  if (!t.length) return;
+  if (!opts.silent) print(line.trim(), "cmd");
+  const name = t[0].toUpperCase(), a = t.slice(1);
+  try {
+    switch (name) {
+      case "HELP": print(HELP); return;
+      case "CLEAR": logEl.textContent = ""; return;
+      case "PLAY": need(a, 0, 0, "PLAY"); play(); return;
+      case "STOP": stop(); print("Stopped"); return;
+      case "EXIT": case "QUIT": print("This is the browser demo, so there is nothing to exit. Close the tab instead.", "note"); return;
+      case "SAVE": print("Saving files needs the real CLI. Build it from GitHub to write WAV files.", "note"); return;
+      case "SPECTROGRAM": print("The spectrogram on the right is always up to date. The CLI writes it to a BMP file.", "note"); return;
+      case "LOAD": case "APPEND":
+        if (name === "APPEND") { print("APPEND needs a second file. Use the CLI for that, or LOAD a new file.", "note"); return; }
+        $("file").click(); print("Choose a WAV file…", "note"); return;
+      case "MIX": {
+        // the demo can only mix in a generated tone: MIX tone <hz>
+        need(a, 2, 3, "MIX tone <hz> [at]  (in the browser demo)");
+        if (a[0].toLowerCase() !== "tone") throw new Error("in the browser demo, use MIX tone <hz> [at]");
+        const hz = num(a[1]), at = a[2] ? num(a[2]) : 0, base = requireClip();
+        if (at < 0) throw new Error("position must be non-negative");
+        const other = tone(hz, base.duration, base.rate);
+        modify(c => { const off = Math.floor(at * c.rate); if (off + other.frames > c.frames) c.resize(off + other.frames);
+          for (const ch of c.ch) for (let i = 0; i < other.frames; i++) ch[off + i] += other.ch[0][i]; });
+        print("Mixed in a " + hz + " Hz tone"); break;
+      }
+      case "TONE": {
+        need(a, 2, 3, "TONE <frequency Hz> <seconds> [sample rate]");
+        const f = num(a[0]), s = num(a[1]), r = a[2] ? num(a[2]) : 44100;
+        if (f <= 0 || s <= 0 || r < 1000 || s > 30) throw new Error("invalid tone parameters (max 30 s in the browser)");
+        replaceClip(tone(f, s, r)); print("Generated a " + f + " Hz tone (" + fmtTime(s) + ")"); break;
+      }
+      case "INFO": {
+        need(a, 0, 0, "INFO"); const c = requireClip(), p = c.peak();
+        print(`Duration:    ${fmtTime(c.duration)} (${c.frames} frames)\nSample rate: ${c.rate} Hz\nChannels:    ${c.ch.length}\nPeak:        ${p > 0 ? (20 * Math.log10(p)).toFixed(1) : "-inf"} dBFS`);
+        return;
+      }
+      case "UNDO": need(a, 0, 0, "UNDO"); if (!state.undo.length) throw new Error("nothing to undo"); state.clip = state.undo.pop(); print("Undone"); break;
+      case "PEAKFREQ": need(a, 0, 0, "PEAKFREQ"); print("Dominant frequency: " + dominantFrequency(requireClip()).toFixed(1) + " Hz"); return;
+      case "CROP": { need(a, 2, 2, "CROP <start s> <end s>"); const s = num(a[0]), e = num(a[1]); modify(c => fx.crop(c, s, e)); print("Cropped to " + fmtTime(state.clip.duration)); break; }
+      case "CUT": { need(a, 2, 2, "CUT <start s> <end s>"); const s = num(a[0]), e = num(a[1]); modify(c => fx.cut(c, s, e)); print("Cut, new length " + fmtTime(state.clip.duration)); break; }
+      case "SILENCE": { need(a, 2, 2, "SILENCE <at s> <length s>"); const s = num(a[0]), l = num(a[1]); modify(c => fx.silence(c, s, l)); print("Inserted silence"); break; }
+      case "MONO": need(a, 0, 0, "MONO"); modify(c => fx.mono(c)); print("Converted to mono"); break;
+      case "REVERSE": need(a, 0, 0, "REVERSE"); modify(c => fx.reverse(c)); print("Applied reverse"); break;
+      case "VOLUME": { need(a, 1, 1, "VOLUME <factor>"); const f = num(a[0]); modify(c => fx.volume(c, f)); print("Applied volume"); break; }
+      case "NORMALIZE": { need(a, 0, 1, "NORMALIZE [target peak 0-1]"); const t2 = a[0] ? num(a[0]) : 0.99; modify(c => fx.normalize(c, t2)); print("Applied normalize"); break; }
+      case "SPEED": { need(a, 1, 1, "SPEED <factor>"); const f = num(a[0]); if (f < 0.1) throw new Error("speed factor must be at least 0.1 in the browser"); modify(c => fx.speed(c, f)); print("Applied speed"); break; }
+      case "FADEIN": { need(a, 1, 1, "FADEIN <seconds>"); const s = num(a[0]); modify(c => fx.fadein(c, s)); print("Applied fade in"); break; }
+      case "FADEOUT": { need(a, 1, 1, "FADEOUT <seconds>"); const s = num(a[0]); modify(c => fx.fadeout(c, s)); print("Applied fade out"); break; }
+      case "ECHO": { need(a, 2, 2, "ECHO <delay seconds> <decay 0-1>"); const d = num(a[0]), k = num(a[1]); modify(c => fx.echo(c, d, k)); print("Applied echo"); break; }
+      case "LOWPASS": { need(a, 1, 1, "LOWPASS <cutoff Hz>"); const f = num(a[0]); modify(c => fx.biquad(c, "low", f)); print("Applied low-pass filter"); break; }
+      case "HIGHPASS": { need(a, 1, 1, "HIGHPASS <cutoff Hz>"); const f = num(a[0]); modify(c => fx.biquad(c, "high", f)); print("Applied high-pass filter"); break; }
+      default: print("Unknown command '" + t[0] + "' (type HELP)", "err"); return;
+    }
+    if (!opts.noRender) render();
+  } catch (e) { print("Error: " + e.message, "err"); }
+}
+
+/* ======================= drawing ======================= */
+function drawWave(clip) {
+  const cv = $("wave"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height, x = clip.mono(), mid = H / 2;
+  ctx.clearRect(0, 0, W, H); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "#ffd166"); grad.addColorStop(0.5, "#ff9440"); grad.addColorStop(1, "#ffd166");
+  ctx.fillStyle = grad;
+  const per = x.length / W;
+  for (let px = 0; px < W; px++) {
+    let lo = 1, hi = -1; const s = Math.floor(px * per), e = Math.max(s + 1, Math.floor((px + 1) * per));
+    for (let i = s; i < e && i < x.length; i++) { if (x[i] < lo) lo = x[i]; if (x[i] > hi) hi = x[i]; }
+    if (hi < lo) continue;
+    const y1 = mid - Math.min(1, hi) * (mid - 2), y2 = mid - Math.max(-1, lo) * (mid - 2);
+    ctx.fillRect(px, y1, 1, Math.max(1, y2 - y1));
+  }
+}
+function freqLabels(rate) {
+  const nyq = rate / 2, minF = Math.min(MIN_F, nyq / 2), el = $("freqLabels"); el.textContent = "";
+  for (let i = 4; i >= 0; i--) { const f = minF * Math.pow(nyq / minF, i / 4), s = document.createElement("span");
+    s.textContent = f >= 1000 ? (f / 1000).toFixed(f >= 10000 ? 0 : 1) + " kHz" : Math.round(f) + " Hz"; el.appendChild(s); }
+}
+function render() {
+  const c = state.clip; if (!c || !c.frames) return;
+  drawWave(c); spectrogram(c, $("spec")); freqLabels(c.rate);
+  const p = c.peak();
+  $("meta").textContent = `${fmtTime(c.duration)} · ${c.rate} Hz · ${c.ch.length} ch · peak ${p > 0 ? (20 * Math.log10(p)).toFixed(1) : "-inf"} dBFS`;
+  $("endTime").textContent = fmtTime(c.duration);
+}
+
+/* ======================= playback ======================= */
+let actx = null, src = null, startedAt = 0, raf = 0;
+function play() {
+  const c = requireClip();
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { throw new Error("this browser can't play audio here"); }
+  stop();
+  const buf = actx.createBuffer(c.ch.length, c.frames, c.rate);
+  c.ch.forEach((a, i) => { const copy = a.slice(); for (let k = 0; k < copy.length; k++) copy[k] = Math.max(-1, Math.min(1, copy[k])); buf.copyToChannel(copy, i); });
+  src = actx.createBufferSource(); src.buffer = buf; src.connect(actx.destination);
+  const resume = actx.state === "suspended" ? actx.resume() : Promise.resolve();
+  resume.then(() => { src.start(); startedAt = actx.currentTime; $("play").textContent = "■ Stop"; tick(); })
+        .catch(() => print("Error: the browser blocked audio playback", "err"));
+  const me = src; src.onended = () => { if (src === me) stop(); };
+}
+function stop() {
+  if (src) { try { src.stop(); } catch (e) {} src = null; }
+  cancelAnimationFrame(raf); $("ph1").style.display = $("ph2").style.display = "none"; $("play").textContent = "▶ Play";
+}
+function tick() {
+  if (!src || !state.clip) return;
+  const f = Math.min(1, (actx.currentTime - startedAt) / state.clip.duration);
+  for (const id of ["ph1", "ph2"]) { const ph = $(id); ph.style.display = "block"; ph.style.left = (f * 100) + "%"; }
+  raf = requestAnimationFrame(tick);
+}
+
+/* ======================= wiring ======================= */
+$("prompt").addEventListener("submit", (e) => {
+  e.preventDefault(); const v = $("cmd").value; if (!v.trim()) return;
+  state.history.push(v); state.hIndex = state.history.length; $("cmd").value = ""; execute(v);
+});
+$("cmd").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" && state.hIndex > 0) { state.hIndex--; $("cmd").value = state.history[state.hIndex]; e.preventDefault(); }
+  if (e.key === "ArrowDown") { state.hIndex = Math.min(state.history.length, state.hIndex + 1); $("cmd").value = state.history[state.hIndex] || ""; e.preventDefault(); }
+});
+$("chips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) execute(b.textContent); });
+$("play").addEventListener("click", () => { if (src) { stop(); return; } try { play(); } catch (e) { print("Error: " + e.message, "err"); } });
+$("preset").addEventListener("change", (e) => loadPreset(e.target.value));
+
+async function loadFile(file) {
+  if (!file) return;
+  try {
+    if (file.size > 60 * 1024 * 1024) throw new Error("file is larger than 60 MB");
+    const clip = parseWav(await file.arrayBuffer());
+    if (!clip.frames) throw new Error("the file has no audio samples");
+    stop(); replaceClip(clip); print("LOAD " + file.name, "cmd");
+    print(`Loaded ${file.name} (${fmtTime(clip.duration)}, ${clip.rate} Hz, ${clip.ch.length} ch)`); render();
+  } catch (e) { print("LOAD " + file.name, "cmd"); print("Error: " + e.message, "err"); }
+}
+$("file").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
+const viz = $("viz");
+viz.addEventListener("dragover", (e) => { e.preventDefault(); viz.classList.add("dragging"); });
+viz.addEventListener("dragleave", () => viz.classList.remove("dragging"));
+viz.addEventListener("drop", (e) => { e.preventDefault(); viz.classList.remove("dragging"); loadFile(e.dataTransfer.files[0]); });
+
+function loadPreset(name) {
+  stop();
+  if (name === "chord") {
+    print("# running examples/demo.txt", "note");
+    for (const line of DEMO_SCRIPT) execute(line, { noRender: true });
+    render(); return;
+  }
+  replaceClip(presetClip(name));
+  const label = $("preset").selectedOptions[0].textContent.replace("Demo: ", "");
+  print("# demo sound: " + label, "note"); render();
+}
+
+/* ======================= hero waterfall ======================= */
+function startWaterfall() {
+  const cv = $("waterfall"), ctx = cv.getContext("2d");
+  const N = 1024, R = 22050, bins = N / 2, re = new Float64Array(N), im = new Float64Array(N), win = hann(N);
+  let H = 0, W = 0, rowBin = null, t = 0, col = null;
+  function size() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.width = Math.round(cv.clientWidth * dpr / 2); H = cv.height = Math.round(cv.clientHeight * dpr / 2);
+    rowBin = new Float64Array(H); const nyq = R / 2;
+    for (let r = 0; r < H; r++) rowBin[r] = Math.min(60 * Math.pow(nyq / 60, r / (H - 1)) / nyq * bins, bins - 1);
+    col = ctx.createImageData(2, H); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  }
+  // a slow generative piece: a bass line, an arpeggio with harmonics, and a rising sweep
+  const scale = [220, 246.94, 277.18, 329.63, 369.99, 440, 493.88, 554.37, 659.25, 739.99];
+  function sample(i) {
+    const s = i / R, beat = Math.floor(s * 4), local = s * 4 - beat;
+    const note = scale[(beat * 3 + Math.floor(beat / 8)) % scale.length] * (beat % 16 < 8 ? 1 : 2);
+    const env = Math.exp(-3 * local);
+    let v = env * (Math.sin(2 * PI * note * s) + 0.5 * Math.sin(4 * PI * note * s) + 0.25 * Math.sin(6 * PI * note * s) + 0.12 * Math.sin(8 * PI * note * s));
+    const bass = scale[Math.floor(beat / 8) % 4] / 4; v += 0.8 * Math.sin(2 * PI * bass * s);
+    const sweepPhase = (s % 6) / 6; v += 0.15 * Math.sin(2 * PI * 300 * Math.pow(20, sweepPhase) * sweepPhase * 6 / Math.log(20));
+    return v;
+  }
+  function column() {
+    const start = Math.floor(t * R);
+    for (let i = 0; i < N; i++) { re[i] = sample(start + i) * win[i]; im[i] = 0; }
+    fft(re, im);
+    const d = col.data;
+    for (let r = 0; r < H; r++) {
+      const k = Math.floor(rowBin[r]), m = Math.hypot(re[k], im[k]) / bins, db = 20 * Math.log10(m + 1e-9);
+      const li = heat((db + 75) / 75), o1 = ((H - 1 - r) * 2) * 4;
+      for (const o of [o1, o1 + 4]) { d[o] = LUT[li]; d[o + 1] = LUT[li + 1]; d[o + 2] = LUT[li + 2]; d[o + 3] = 255; }
+    }
+    ctx.drawImage(cv, -2, 0); ctx.putImageData(col, W - 2, 0);
+    t += 0.012;
+  }
+  size();
+  for (let i = 0; i < W / 2; i++) column();   // fill the band so the first frame is complete
+  window.addEventListener("resize", () => { size(); for (let i = 0; i < W / 2; i++) column(); });
+  if (reduceMotion) return;
+  let last = 0;
+  (function loop(ts) { if (ts - last > 30) { column(); last = ts; } requestAnimationFrame(loop); })(0);
+}
+
+/* ======================= start ======================= */
+print("CLI Audio Editor (browser port). Type HELP for commands.", "note");
+loadPreset("chord");
+startWaterfall();
+</script>
+</body>
+</html>
